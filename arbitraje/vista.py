@@ -16,23 +16,31 @@ def _fmt_monto(valor):
     return "-" if valor is None else str(valor)
 
 
+def _trunc(texto, largo=22):
+    if not texto:
+        return ""
+    texto = str(texto)
+    return texto if len(texto) <= largo else texto[: largo - 1] + "…"
+
+
 def tabla_jornadas(jornadas):
     if not jornadas:
         print("(sin resultados)")
         return
-    encabezado = "%-4s %-10s %-13s %6s %7s %5s %7s %s" % (
-        "id", "fecha", "estado", "part", "bruto", "desc", "neto", "torneo")
+    encabezado = "%-4s %-10s %-13s %6s %7s %5s %7s %-12s %s" % (
+        "id", "fecha", "estado", "part", "bruto", "desc", "neto", "torneo", "nota")
     print(encabezado)
     print("-" * len(encabezado))
     for j in jornadas:
         neto = repo.neto_de(j)
-        print("%-4s %-10s %-13s %6s %7s %5s %7s %s" % (
+        print("%-4s %-10s %-13s %6s %7s %5s %7s %-12s %s" % (
             j["id"], j["fecha"], j["estado"],
             _fmt_float(j["partidos_total"]),
             _fmt_monto(j["bruto"]),
             j["total_descuentos"] or 0,
             "-" if neto is None else neto,
-            j.get("torneo_nombre") or "",
+            _trunc(j.get("torneo_nombre") or "", 12),
+            _trunc(j.get("nota") or "", 22),
         ))
 
 
