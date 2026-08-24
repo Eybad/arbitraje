@@ -200,6 +200,12 @@ def editar(conn, jornada_id=None):
             elif campo == "k":
                 if confirmar("Borrar jornada #%d? Esta acción no se puede deshacer" % jornada_id, default=False):
                     if _leer("Escriba SI para confirmar: ") == "SI":
+                        try:
+                            from .db import respaldar
+                            bkp = respaldar()
+                            print(f"  backup: {bkp}")
+                        except Exception:
+                            pass
                         repo.eliminar_jornada(conn, jornada_id)
                         print("jornada eliminada")
                         return
@@ -260,6 +266,11 @@ def eliminar(conn, jornada_id=None):
     vista.detalle_jornada(conn, jornada)
     respuesta = _leer("Escriba SI para eliminar: ")
     if respuesta == "SI":
+        try:
+            from .db import respaldar
+            print(f"  backup: {respaldar()}")
+        except Exception:
+            pass
         repo.eliminar_jornada(conn, jornada_id)
         print("eliminada")
     else:
