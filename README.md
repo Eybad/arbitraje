@@ -21,6 +21,17 @@ Python 3 + SQLite, solo biblioteca estándar. Pensada para Termux.
 Por defecto en `~/.local/share/arbitraje/arbitraje.db`.
 Override con la variable `ARBITRAJE_DB`.
 
+## Instalacion del comando global
+
+    mkdir -p ~/bin && cat > ~/bin/arbitraje << 'EOF'
+    #!/data/data/com.termux/files/usr/bin/sh
+    set -eu
+    PYTHONPATH="$HOME/proyectos/arbitraje${PYTHONPATH:+:$PYTHONPATH}"
+    export PYTHONPATH
+    exec python3 -P -m arbitraje "$@"
+    EOF
+    chmod +x ~/bin/arbitraje
+
 ## Desarrollo
 
     python3 -m unittest discover -s tests -v
