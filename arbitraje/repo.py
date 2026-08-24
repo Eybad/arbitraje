@@ -107,10 +107,13 @@ def listar_jornadas(conn, fecha_desde=None, fecha_hasta=None, estado=None,
     if texto_nota:
         consulta += " AND j.nota LIKE ?"
         valores.append("%" + texto_nota + "%")
-    consulta += " ORDER BY j.fecha DESC, j.id DESC"
     if limite:
-        consulta += " LIMIT ?"
+        consulta += " ORDER BY j.fecha DESC, j.id DESC LIMIT ?"
         valores.append(limite)
+        filas = [dict(f) for f in conn.execute(consulta, valores)]
+        filas.reverse()
+        return filas
+    consulta += " ORDER BY j.fecha ASC, j.id ASC"
     return [dict(f) for f in conn.execute(consulta, valores)]
 
 
