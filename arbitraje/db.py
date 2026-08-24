@@ -103,3 +103,13 @@ def _sembrar(conn):
         )
     for nombre in TORNEOS_SEED:
         conn.execute("INSERT OR IGNORE INTO torneos (nombre) VALUES (?)", (nombre,))
+
+
+def respaldar(ruta=None):
+    """Copia timestamped de la base; devuelve la ruta del backup."""
+    import shutil
+    import time
+    ruta = Path(ruta) if ruta else db_path()
+    destino = Path(str(ruta) + ".bak-" + time.strftime("%Y%m%d-%H%M%S"))
+    shutil.copy2(str(ruta), str(destino))
+    return destino
