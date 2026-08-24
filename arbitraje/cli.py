@@ -48,8 +48,9 @@ def _construir_parser():
 
     sub.add_parser("review", help="revisar excepciones de importación")
 
-    p_export = sub.add_parser("export", help="exportar CSV")
+    p_export = sub.add_parser("export", help="exportar (csv/xlsx/xls)")
     p_export.add_argument("directorio", nargs="?", default=".")
+    p_export.add_argument("--formato", default="csv", choices=["csv","xlsx","xls"], help="formato de salida")
 
     sub.add_parser("config", help="configurar conceptos y torneos")
 
@@ -97,7 +98,7 @@ def _despachar(conn, args, parser):
     elif comando == "review":
         menu.review(conn)
     elif comando == "export":
-        rutas = export.exportar(conn, args.directorio)
+        rutas = export.exportar(conn, args.directorio, formato=args.formato)
         for ruta in rutas:
             print(ruta)
     elif comando == "config":

@@ -20,7 +20,8 @@ ARBITRAJE
 4) Estadisticas
 5) Importar historico
 6) Configuracion
-7) Salir
+7) Exportar
+8) Salir
 """
 
 
@@ -48,7 +49,9 @@ def run(conn):
             importar_historico(conn)
         elif opcion == "6":
             configuracion(conn)
-        elif opcion in ("7", "s", "S", "q", "Q"):
+        elif opcion == "7":
+            exportar_menu(conn)
+        elif opcion in ("8", "s", "S", "q", "Q"):
             return
 
 
@@ -170,7 +173,7 @@ def editar(conn, jornada_id=None):
     vista.detalle_jornada(conn, jornada)
     cambios = {}
     while True:
-        campo = _leer("[f]echa [e]stado [p]artidos [b]ruto [t]orneo [n]ota [c]erteza [d]escuentos [g]uardar [x]salir: ").lower()
+        campo = _leer("[f]echa [e]stado [p]artidos [b]ruto [t]orneo [n]ota [c]erteza [d]escuentos [g]uardar [k]BORRAR [x]salir: ").lower()
         try:
             if campo == "f":
                 cambios["fecha"] = pedir_fecha("Fecha").isoformat()
@@ -194,6 +197,15 @@ def editar(conn, jornada_id=None):
                     repo.actualizar_jornada(conn, jornada_id, cambios)
                     print("actualizada")
                 return
+            elif campo == "k":
+                if confirmar("Borrar jornada #%d? Esta acción no se puede deshacer" % jornada_id, default=False):
+                    if _leer("Escriba SI para confirmar: ") == "SI":
+                        repo.eliminar_jornada(conn, jornada_id)
+                        print("jornada eliminada")
+                        return
+                    print("cancelado")
+                else:
+                    print("cancelado")
             elif campo == "x":
                 print("sin guardar cambios" if cambios else "")
                 return
@@ -424,6 +436,22 @@ def _config_conceptos(conn):
             repo.set_concepto_default(conn, elegido["id"], pedir_monto("Default", default=0))
         elif opcion == "l":
             repo.set_concepto_aliases(conn, elegido["id"], pedir_texto("Aliases", elegido["aliases"] or ""))
+
+
+def exportar_menu(conn):
+    print("\nExportar: 1) CSV  2) XLSX  3) XLS  0) volver")
+    opcion = _leer("Formato: ")
+    if opcion not in ("1", "2", "3"):
+        return
+    directorio = pedir_texto("Directorio destino", ".")
+    formatos = {"1": "csv", "2": "xlsx", "3": "xls"}
+    formato = formatos[opcion]
+    try:
+        rutas = export.exportar(conn, directorio, formato=formato)
+        for r in rutas:
+            print(f"  -> {r}")
+    except Exception as e:
+        print(f"  error: {e}")
 
 
 def _config_torneos(conn):
