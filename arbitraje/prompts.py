@@ -22,7 +22,7 @@ def pedir_texto(prompt, default=""):
 def pedir_fecha(prompt, default=None):
     while True:
         texto = pedir_texto(prompt, default.isoformat() if default else "")
-        if not texto and default:
+        if not texto:
             return default
         try:
             return parse_fecha(texto)
