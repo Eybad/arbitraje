@@ -75,6 +75,38 @@ def registrar(conn, fecha_default=None):
             monto = pedir_monto(concepto["nombre"], default=concepto["default_monto"])
             if monto > 0:
                 elegidos.append((concepto, monto))
+        # Descuentos puntuales extra (no saturar el alta diaria)
+        while True:
+            nombre = pedir_texto("Otro descuento puntual (vacío termina)", "")
+            if not nombre:
+                break
+            # Buscar concepto existente (incluye inactivos) por nombre/alias normalizado
+            mapa = repo.mapa_aliases(conn)
+            clave = normalizar(nombre)
+            cid = None
+            if clave in mapa:
+                cid = mapa[clave][0]
+            else:
+                # Crear nuevo concepto para este puntual, dejarlo inactivo para no saturar futuros altas
+                try:
+                    cid = repo.crear_concepto(conn, nombre.strip(), 0, "")
+                    repo.set_concepto_activo(conn, cid, False)
+                except ErrorValidacion as error:
+                    print("  error: %s" % error)
+                    continue
+            # Evitar duplicar mismo concepto en la misma jornada
+            if any(c["id"] == cid for c, _ in elegidos):
+                print("  ya existe ese descuento en esta jornada")
+                continue
+            monto = pedir_monto(f"Monto {nombre}", default=0)
+            if monto is None or monto <= 0:
+                print("  monto debe ser > 0, omitido")
+                continue
+            # Resolver objeto concepto para guardar
+            concepto_obj = next((c for c in repo.listar_conceptos(conn) if c["id"] == cid), None)
+            if concepto_obj is None:
+                continue
+            elegidos.append((concepto_obj, monto))
 
     torneo_id = _pedir_torneo(conn)
     nota = pedir_texto("Nota", "")
