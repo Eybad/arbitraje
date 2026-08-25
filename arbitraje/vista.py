@@ -40,7 +40,7 @@ def tabla_jornadas(jornadas):
             j["total_descuentos"] or 0,
             "-" if neto is None else neto,
             _trunc(j.get("torneo_nombre") or "", 12),
-            _trunc(j.get("nota") or "", 22),
+            _trunc(j.get("nota") or "", 10),
         ))
 
 
