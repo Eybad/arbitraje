@@ -90,9 +90,6 @@ CONCEPTOS_SEED = [
     ("Deuda", 0, 16, "deuda"),
 ]
 
-TORNEOS_SEED = ["Ribereña", "Paisanos", "La Salle", "Villa Vecinal", "LIFJUVE", "Coca Cola"]
-
-
 def validar_jornada(estado, bruto, partidos_total=None):
     """Reglas duras del dominio. Devuelve lista de errores (vacía si ok)."""
     errores = []

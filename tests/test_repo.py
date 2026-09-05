@@ -19,8 +19,8 @@ class TestRepo(unittest.TestCase):
         conceptos = {c["nombre"] for c in repo.listar_conceptos(self.conn)}
         self.assertIn("Asesoría", conceptos)
         self.assertIn("Deuda", conceptos)
-        torneos = {t["nombre"] for t in repo.listar_torneos(self.conn)}
-        self.assertIn("Coca Cola", torneos)
+        # torneos eliminados en v2: solo conceptos
+        self.assertEqual(len(conceptos), 16)
 
     def test_ciclo_jornada_completo(self):
         jid = repo.crear_jornada(
@@ -70,10 +70,14 @@ class TestRepo(unittest.TestCase):
         self.assertEqual(len(solo_lluvia), 1)
         self.assertEqual(solo_lluvia[0]["estado"], "LLUVIA")
 
-    def test_torneo_busqueda_insensible(self):
-        tid = repo.obtener_o_crear_torneo(self.conn, "ribereña")
-        encontrado = repo.buscar_torneo(self.conn, "RIBEREÑA")
-        self.assertEqual(encontrado["id"], tid)
+    def test_nota_contiene_torneo_migrado(self):
+        jid = repo.crear_jornada(self.conn, "2025-09-07", Estado.ARBITRADO, bruto=100, nota="[Torneo: Ribereña] ; prueba")
+        jornadas = repo.listar_jornadas(self.conn, texto_nota="Ribereña")
+        self.assertEqual(len(jornadas), 1)
+        self.assertEqual(jornadas[0]["id"], jid)
+        # alias legacy torneo_texto → nota
+        jornadas2 = repo.listar_jornadas(self.conn, torneo_texto="Ribereña")
+        self.assertEqual(len(jornadas2), 1)
 
     def test_mapa_aliases(self):
         mapa = repo.mapa_aliases(self.conn)

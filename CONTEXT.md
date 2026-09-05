@@ -5,7 +5,7 @@ CLI local para registrar jornadas de arbitraje y analizar ingresos. Unidad míni
 ## Language
 
 **Jornada**:
-Día registrado con un estado; unidad mínima del sistema. Puede haber más de una por fecha (dos torneos el mismo día).
+Día registrado con un estado; unidad mínima del sistema. Puede haber más de una por fecha (dos jornadas el mismo día).
 _Avoid_: registro, entrada, día
 
 **Estado**:
@@ -36,10 +36,6 @@ _Avoid_: deducción, gasto
 Categoría reutilizable de descuento con default configurable y aliases históricos (`a`→Asesoría, `f`→Fondo). `Otros` recibe lo no clasificado; `Deuda` registra el marcador `*-50*` del histórico.
 _Avoid_: categoría, tipo
 
-**Torneo**:
-Competición reutilizable, entidad propia. Asignación por jerarquía de marcadores del histórico; los marcadores de final también dejan nota.
-_Avoid_: liga, campeonato (como campo)
-
 **Certeza**:
 Confianza en un registro importado: CONFIRMADO, PROBABLE (fecha recalculada por rótulo de día), DUDOSO (dato ambiguo). No se pregunta en registros nuevos.
 _Avoid_: confianza, validez
@@ -47,3 +43,5 @@ _Avoid_: confianza, validez
 **Cola de revisión**:
 Registro de líneas del histórico que el importador no resolvió (`import_issues`). Nada entra a la base inventado ni subestimado en silencio.
 _Avoid_: errores, log
+
+> Nota migración v2: hasta v1 existía la entidad `Torneo` (tabla `torneos` + `jornadas.torneo_id`). Desde v2 se eliminó (drop duro); todo valor previo se volcó a `nota` con prefijo `[Torneo: X]` (ej `[Torneo: Ribereña] ; nota original`). El importador ya no crea torneos: cualquier marcador de torneo se añade a la nota.

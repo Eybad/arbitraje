@@ -44,10 +44,6 @@ class Mapas:
         self.conceptos = repo.mapa_aliases(conn)
         self.otros = self._concepto_por_nombre("Otros")
         self.deuda = self._concepto_por_nombre("Deuda")
-        self.torneos = {
-            normalizar(t["nombre"]): t["nombre"]
-            for t in repo.listar_torneos(conn)
-        }
 
     def _concepto_por_nombre(self, nombre):
         for par in self.conceptos.values():
@@ -78,7 +74,6 @@ class Candidato:
         self.roles_detalle = None
         self.valor_neto = None
         self.bruto = None
-        self.torneo = None
         self.notas = []
         self.descuentos = {}   # concepto_id -> {nombre, monto, notas}
         self.bloqueado = None
@@ -86,6 +81,11 @@ class Candidato:
     def nota(self, texto):
         if texto and texto not in self.notas:
             self.notas.append(texto)
+
+    def nota_torneo(self, nombre):
+        """Volcado legacy torneo → nota con prefijo [Torneo: X]."""
+        if nombre:
+            self.nota(f"[Torneo: {nombre}]")
 
 
 class Resultado:
@@ -103,7 +103,6 @@ class Resultado:
                 "estado": candidato.estado.value,
                 "partidos": candidato.partidos,
                 "bruto": candidato.bruto,
-                "torneo": candidato.torneo,
                 "notas": candidato.notas,
             }, ensure_ascii=False)
         self.issues.append({
@@ -349,6 +348,18 @@ def _mas_cercana(base, dia_idx):
 
 # ------------------------------------------------------------ contenido
 
+_TORNEOS_CONOCIDOS = ["Ribereña", "Paisanos", "La Salle", "Villa Vecinal", "LIFJUVE", "Coca Cola"]
+
+
+def _detectar_torneo_en_texto(texto):
+    """Busca torneo conocido en texto; devuelve nombre original o None."""
+    norm = normalizar(texto)
+    for nombre in _TORNEOS_CONOCIDOS:
+        if normalizar(nombre) in norm:
+            return nombre
+    return None
+
+
 def _construir_candidato(linea, fecha, certeza, resultado, mapas):
     c = Candidato(fecha, linea.texto)
     c.certeza = certeza
@@ -357,7 +368,8 @@ def _construir_candidato(linea, fecha, certeza, resultado, mapas):
     contenido = linea.contenido
 
     if linea.seccion:
-        c.torneo = mapas.torneos.get(normalizar(linea.seccion), linea.seccion)
+        torneo = _detectar_torneo_en_texto(linea.seccion) or linea.seccion
+        c.nota_torneo(torneo)
 
     if not contenido:
         return c  # placeholder vacío -> SIN_DATOS
@@ -421,9 +433,9 @@ def _parsear_lado_valor(c, texto, resultado, mapas):
         interior = grupo[1:-1].strip()
         if "%" in interior:
             continue
-        clave = normalizar(interior)
-        if clave in mapas.torneos:
-            c.torneo = mapas.torneos[clave]
+        torneo = _detectar_torneo_en_texto(interior)
+        if torneo:
+            c.nota_torneo(torneo)
             continue
         _parsear_grupo_descuentos(c, interior, resultado, mapas)
 
@@ -488,27 +500,26 @@ def _parsear_trailing(c, texto, mapas):
 
     m_final = re.search(r"final\s+([\w\s]+)", normalizado)
     if m_final:
-        torneo = _buscar_torneo_por_frase(mapas, m_final.group(1))
+        torneo = _detectar_torneo_en_texto(m_final.group(1))
         if torneo:
-            c.torneo = torneo
+            c.nota_torneo(torneo)
         c.nota(texto)
         return
 
     m_sufijo = re.search(r"-\s*([A-Za-zÁÉÍÓÚÑáéíóúñ][\wÁÉÍÓÚÑáéíóúñ ]*)\s*$", texto)
     if m_sufijo:
-        clave = normalizar(m_sufijo.group(1).strip())
-        if clave in mapas.torneos:
-            c.torneo = mapas.torneos[clave]
+        torneo = _detectar_torneo_en_texto(m_sufijo.group(1))
+        if torneo:
+            c.nota_torneo(torneo)
             texto = texto[:m_sufijo.start()].strip()
             normalizado = normalizar(texto)
 
-    if not c.torneo:
-        for clave in sorted(mapas.torneos, key=len, reverse=True):
-            if clave in normalizado:
-                c.torneo = mapas.torneos[clave]
-                texto = _quitar_frase(texto, clave).strip()
-                normalizado = normalizar(texto)
-                break
+    if not any(n.startswith("[Torneo:") for n in c.notas):
+        torneo = _detectar_torneo_en_texto(normalizado)
+        if torneo:
+            c.nota_torneo(torneo)
+            texto = _quitar_frase(texto, normalizar(torneo)).strip()
+            normalizado = normalizar(texto)
 
     for token in TOKENS_AMBIGUOS:
         if normalizar(token) in normalizado:
@@ -555,13 +566,8 @@ def _quitar_palabras_sueltas(texto, normalizado_restante):
 
 
 def _buscar_torneo_por_frase(mapas, frase):
-    palabras = frase.split()
-    while palabras:
-        clave = normalizar(" ".join(palabras))
-        if clave in mapas.torneos:
-            return mapas.torneos[clave]
-        palabras = palabras[:-1]
-    return None
+    # legacy shim — ahora usa _detectar_torneo_en_texto
+    return _detectar_torneo_en_texto(frase)
 
 
 def _detectar_ambiguos(c, contenido, resultado):
@@ -616,13 +622,10 @@ def aplicar(resultado, conn):
     for c in resultado.candidatos:
         if c.bloqueado:
             continue
-        torneo_id = None
-        if c.torneo:
-            torneo_id = repo.obtener_o_crear_torneo(conn, c.torneo)
         jid = repo.crear_jornada(
             conn, c.fecha.isoformat(), c.estado,
             partidos_total=c.partidos, roles_detalle=c.roles_detalle,
-            bruto=c.bruto, torneo_id=torneo_id, certeza=c.certeza,
+            bruto=c.bruto, certeza=c.certeza,
             nota="; ".join(c.notas) or None,
         )
         conteo["jornadas"] += 1

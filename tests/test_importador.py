@@ -160,16 +160,18 @@ class TestImportador(unittest.TestCase):
         r = self._parsear(FIXTURE)
         diez_mayo = self._por_fecha(r, "2025-05-10")
         self.assertEqual(len(diez_mayo), 2)
-        torneos = {c.torneo for c in diez_mayo}
-        self.assertEqual(torneos, {"Villa Vecinal", "La Salle"})
-        villa = [c for c in diez_mayo if c.torneo == "Villa Vecinal"][0]
+        # desde v2 torneo va a nota
+        notas = ["; ".join(c.notas) for c in diez_mayo]
+        self.assertTrue(any("[Torneo: Villa Vecinal]" in n for n in notas))
+        self.assertTrue(any("[Torneo: La Salle]" in n for n in notas))
+        villa = [c for c in diez_mayo if any("Villa Vecinal" in n for n in c.notas)][0]
         self.assertEqual(villa.partidos, 4)  # 3+1(80%) cuenta físico
         self.assertEqual(villa.roles_detalle, "3+1(80%)")
 
     def test_encabezado_seccion_asigna_torneo(self):
         r = self._parsear(FIXTURE)
         jueves = self._por_fecha(r, "2025-05-08")[0]
-        self.assertEqual(jueves.torneo, "Villa Vecinal")
+        self.assertTrue(any("[Torneo: Villa Vecinal]" in n for n in jueves.notas))
 
     def test_linea_solo_monto(self):
         r = self._parsear("86k) Sab 2 may: 130 (-10 c)\n", ano=2026)
@@ -201,10 +203,10 @@ class TestImportador(unittest.TestCase):
     def test_torneo_coca_cola_y_final(self):
         r = self._parsear(FIXTURE)
         coca = self._por_fecha(r, "2026-01-04")[0]
-        self.assertEqual(coca.torneo, "Coca Cola")
+        self.assertTrue(any("[Torneo: Coca Cola]" in n for n in coca.notas))
         final_ = self._por_fecha(r, "2025-06-21")[0]
-        self.assertEqual(final_.torneo, "La Salle")
-        self.assertIn("FINAL", final_.notas[0])
+        self.assertTrue(any("[Torneo: La Salle]" in n for n in final_.notas))
+        self.assertIn("FINAL", "; ".join(final_.notas))
 
     def test_token_ambiguo_va_a_revision(self):
         r = self._parsear("56k) Dom 5 oct: descanso/viaje\n")

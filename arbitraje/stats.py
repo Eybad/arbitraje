@@ -38,23 +38,7 @@ def por_periodo(conn, formato_sql, desde=None, hasta=None):
     return _filas(conn, consulta, valores + [formato_sql])
 
 
-def por_torneo(conn, desde=None, hasta=None):
-    condiciones, valores = _rango(desde, hasta)
-    consulta = (
-        "WITH base AS ("
-        " SELECT j.torneo_id, j.partidos_total, j.bruto,"
-        " (SELECT COALESCE(SUM(monto), 0) FROM descuentos d"
-        "   WHERE d.jornada_id = j.id) AS descuentos"
-        " FROM jornadas j WHERE j.estado = 'ARBITRADO' AND j.bruto IS NOT NULL"
-        + condiciones + ")"
-        " SELECT COALESCE(t.nombre, '(sin torneo)') AS torneo,"
-        " COUNT(*) AS jornadas, SUM(b.partidos_total) AS partidos,"
-        " SUM(b.bruto) AS bruto, SUM(b.descuentos) AS descuentos,"
-        " SUM(b.bruto - b.descuentos) AS neto"
-        " FROM base b LEFT JOIN torneos t ON t.id = b.torneo_id"
-        " GROUP BY b.torneo_id ORDER BY neto DESC"
-    )
-    return _filas(conn, consulta, valores)
+
 
 
 def descuentos_por_concepto(conn, desde=None, hasta=None):
@@ -104,11 +88,28 @@ def jornadas_por_estado(conn, desde=None, hasta=None):
 
 # ---------------------------------------------------------------- render
 
+def _fmt_desc(v):
+    if not v:
+        return "0"
+    return f"-{v}"
+
+
 def _linea(valores, anchos):
     return "  ".join(str(v).rjust(a) for v, a in zip(valores, anchos))
 
 
-def imprimir_tabla_estadistica(titulo, filas, clave_periodo="periodo"):
+def imprimir_tabla_estadistica(titulo, filas, clave_periodo="periodo", plain=None):
+    # plain=None auto-detecta; si Rich disponible y no plain, usar rich
+    if not plain:
+        import os, sys
+        is_plain = ("NO_COLOR" in os.environ) or (plain is True)
+        if not is_plain and sys.stdout.isatty():
+            try:
+                from .vista_rich import tabla_estadistica_rich
+                if tabla_estadistica_rich(titulo, filas, clave_periodo):
+                    return
+            except Exception:
+                pass
     print(titulo)
     if not filas:
         print("  (sin datos)")
@@ -121,12 +122,22 @@ def imprimir_tabla_estadistica(titulo, filas, clave_periodo="periodo"):
             f["jornadas"],
             "-" if f["partidos"] is None else round(f["partidos"], 1),
             f["bruto"] or 0,
-            f["descuentos"] or 0,
+            _fmt_desc(f["descuentos"]),
             f["neto"] or 0,
         ], anchos))
 
 
-def imprimir_descuentos_por_concepto(filas, titulo="DESCUENTOS"):
+def imprimir_descuentos_por_concepto(filas, titulo="DESCUENTOS", plain=None):
+    if not plain:
+        import os, sys
+        is_plain = ("NO_COLOR" in os.environ) or (plain is True)
+        if not is_plain and sys.stdout.isatty():
+            try:
+                from .vista_rich import descuentos_rich
+                if descuentos_rich(filas, titulo):
+                    return
+            except Exception:
+                pass
     print(titulo)
     if not filas:
         print("  (sin datos)")
@@ -134,10 +145,10 @@ def imprimir_descuentos_por_concepto(filas, titulo="DESCUENTOS"):
     ancho = max(len(f["concepto"]) for f in filas) + 2
     total = 0
     for f in filas:
-        print("  %-*s %6d Bs" % (ancho, f["concepto"], f["total"]))
+        print("  %-*s -%6d Bs" % (ancho, f["concepto"], f["total"]))
         total += f["total"]
-    print("  %s" % ("-" * (ancho + 9)))
-    print("  %-*s %6d Bs" % (ancho, "TOTAL", total))
+    print("  %s" % ("-" * (ancho + 10)))
+    print("  %-*s -%6d Bs" % (ancho, "TOTAL", total))
 
 
 def imprimir_resumen(resumen):
@@ -151,7 +162,7 @@ def imprimir_resumen(resumen):
     print("  jornadas : %d" % jornadas)
     print("  partidos : %s" % ("-" if partidos is None else round(partidos, 1)))
     print("  bruto    : %d Bs" % bruto)
-    print("  descuentos: %d Bs" % (resumen["descuentos"] or 0))
+    print("  descuentos: %s Bs" % _fmt_desc(resumen["descuentos"]))
     print("  neto     : %d Bs" % neto)
     if jornadas:
         print("  prom/jornada: %d Bs" % round(neto / jornadas))

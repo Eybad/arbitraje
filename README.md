@@ -7,14 +7,17 @@ Python 3 + SQLite, solo biblioteca estándar. Pensada para Termux.
 
     arbitraje              menu interactivo
     arbitraje add          registrar jornada rapida
-    arbitraje list         ultimas jornadas
-    arbitraje search       buscar
-    arbitraje stats        estadisticas
+    arbitraje list         ultimas jornadas (opciones: --desde/--hasta/--estado/--nota/--limite/--plain/--json)
+    arbitraje search       buscar (--estado/--desde/--hasta/--nota)
+    arbitraje stats        estadisticas (--anio/--desde/--hasta/--plain/--json)
     arbitraje edit ID      editar jornada
     arbitraje delete ID    eliminar jornada (pide confirmacion)
     arbitraje import FILE  importar historico (dry-run por defecto, --commit aplica)
     arbitraje review       revisar excepciones de importacion
-    arbitraje export DIR   exportar CSV
+    arbitraje export DIR   exportar CSV/XLSX/XLS (--formato csv|xlsx|xls)
+    arbitraje --version    version
+
+Notas: --torneo obsoleto (usar --nota "[Torneo: X]"), salida Rich opcional si está instalado (fallback stdlib), respetar NO_COLOR y TTY.
 
 ## Base de datos
 

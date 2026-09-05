@@ -1,13 +1,44 @@
 """Entrada interactiva con defaults, validación y reintento."""
 
+import os
+import re
+import sys
 from datetime import date
 
 from .modelos import Estado, normalizar
 from .validacion import parse_fecha, parse_monto, parse_partidos, ErrorValidacion
 
 
+def _use_color():
+    return not ("NO_COLOR" in os.environ or not sys.stdout.isatty())
+
+
+def _cprint(texto):
+    if _use_color():
+        try:
+            from rich.console import Console
+            Console().print(texto, markup=True, crop=False, overflow="ignore", soft_wrap=True)
+            return
+        except Exception:
+            pass
+    # strip markup
+    print(re.sub(r"\[/?[^\]]*\]", "", texto))
+
+
+def _cerr(texto):
+    _cprint(f"[red]{texto}[/]")
+
+
 def _leer(prompt):
     try:
+        if _use_color():
+            try:
+                from rich.console import Console
+                # prompt en amarillo, con rich markup si viene
+                Console().print(f"[yellow]{prompt}[/]", end="", markup=True, soft_wrap=True)
+                return input().strip()
+            except Exception:
+                pass
         return input(prompt).strip()
     except (EOFError, KeyboardInterrupt):
         print()
@@ -27,7 +58,7 @@ def pedir_fecha(prompt, default=None):
         try:
             return parse_fecha(texto)
         except ErrorValidacion as error:
-            print("  %s" % error)
+            _cerr("  %s" % error)
 
 
 def pedir_monto(prompt, default=None, permitir_nulo=False):
@@ -42,7 +73,7 @@ def pedir_monto(prompt, default=None, permitir_nulo=False):
         try:
             return parse_monto(texto)
         except ErrorValidacion as error:
-            print("  %s" % error)
+            _cerr("  %s" % error)
 
 
 def pedir_partidos(prompt, default=None, permitir_nulo=False):
@@ -56,7 +87,7 @@ def pedir_partidos(prompt, default=None, permitir_nulo=False):
         try:
             return parse_partidos(texto)
         except ErrorValidacion as error:
-            print("  %s" % error)
+            _cerr("  %s" % error)
 
 
 def _fmt_float(valor):
@@ -78,7 +109,7 @@ def pedir_estado(default=Estado.ARBITRADO):
         coincidencias = [e for e in Estado if normalizar(e.value).startswith(objetivo)]
         if len(coincidencias) == 1:
             return coincidencias[0]
-        print("  estado inválido. Opciones: %s" % nombres)
+        _cerr("  estado inválido. Opciones: %s" % nombres)
 
 
 def pedir_certeza(default="CONFIRMADO"):
@@ -91,7 +122,7 @@ def pedir_certeza(default="CONFIRMADO"):
         for opcion in opciones:
             if normalizar(opcion).startswith(objetivo):
                 return opcion
-        print("  certeza inválida. Opciones: %s" % ", ".join(opciones))
+        _cerr("  certeza inválida. Opciones: %s" % ", ".join(opciones))
 
 
 def confirmar(prompt, default=True):
@@ -104,7 +135,7 @@ def confirmar(prompt, default=True):
             return True
         if texto in ("n", "no"):
             return False
-        print("  responder s o n")
+        _cerr("  responder s o n")
 
 
 def elegir_de_lista(prompt, opciones, formato=str):
@@ -112,11 +143,14 @@ def elegir_de_lista(prompt, opciones, formato=str):
     if not opciones:
         return None
     for indice, opcion in enumerate(opciones, 1):
-        print("  %2d) %s" % (indice, formato(opcion)))
+        if _use_color():
+            _cprint(f"  [cyan]{indice:2d})[/] [white]{formato(opcion)}[/]")
+        else:
+            print("  %2d) %s" % (indice, formato(opcion)))
     while True:
         texto = _leer("%s [1-%d, vacío cancela]: " % (prompt, len(opciones)))
         if not texto:
             return None
         if texto.isdigit() and 1 <= int(texto) <= len(opciones):
             return opciones[int(texto) - 1]
-        print("  opción inválida")
+        _cerr("  opción inválida")

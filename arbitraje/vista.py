@@ -16,6 +16,12 @@ def _fmt_monto(valor):
     return "-" if valor is None else str(valor)
 
 
+def _fmt_desc(valor):
+    if not valor:
+        return "0"
+    return f"-{valor}"
+
+
 def _trunc(texto, largo=22):
     if not texto:
         return ""
@@ -23,23 +29,35 @@ def _trunc(texto, largo=22):
     return texto if len(texto) <= largo else texto[: largo - 1] + "…"
 
 
-def tabla_jornadas(jornadas):
+def tabla_jornadas(jornadas, plain=None):
+    # plain=True fuerza salida sin colores (para pipe); si None detecta TTY/NO_COLOR
     if not jornadas:
         print("(sin resultados)")
         return
-    encabezado = "%-4s %-10s %-13s %6s %7s %5s %7s %-12s %s" % (
-        "id", "fecha", "estado", "part", "bruto", "desc", "neto", "torneo", "nota")
+    # Intentar Rich si disponible y no es plain
+    use_plain = plain
+    if use_plain is None:
+        import os, sys
+        use_plain = ("NO_COLOR" in os.environ) or not sys.stdout.isatty()
+    if not use_plain:
+        try:
+            from .vista_rich import tabla_jornadas_rich
+            if tabla_jornadas_rich(jornadas):
+                return
+        except Exception:
+            pass
+    encabezado = "%-4s %-10s %-13s %6s %7s %5s %7s %s" % (
+        "id", "fecha", "estado", "part", "bruto", "desc", "neto", "nota")
     print(encabezado)
     print("-" * len(encabezado))
     for j in jornadas:
         neto = repo.neto_de(j)
-        print("%-4s %-10s %-13s %6s %7s %5s %7s %-12s %s" % (
+        print("%-4s %-10s %-13s %6s %7s %5s %7s %s" % (
             j["id"], j["fecha"], j["estado"],
             _fmt_float(j["partidos_total"]),
             _fmt_monto(j["bruto"]),
-            j["total_descuentos"] or 0,
+            _fmt_desc(j["total_descuentos"]),
             "-" if neto is None else neto,
-            _trunc(j.get("torneo_nombre") or "", 12),
             _trunc(j.get("nota") or "", 10),
         ))
 
@@ -56,10 +74,9 @@ def detalle_jornada(conn, jornada):
         print("  descuentos:")
         for d in descuentos:
             nota = (" (%s)" % d["nota"]) if d["nota"] else ""
-            print("    %-10s %5d Bs%s" % (d["concepto_nombre"], d["monto"], nota))
+            print("    %-10s -%5d Bs%s" % (d["concepto_nombre"], d["monto"], nota))
     else:
         print("  descuentos: ninguno")
     print("  neto     : %s Bs" % _fmt_monto(repo.neto_de(jornada)))
-    print("  torneo   : %s" % (jornada.get("torneo_nombre") or "-"))
     if jornada.get("nota"):
         print("  nota     : %s" % jornada["nota"])

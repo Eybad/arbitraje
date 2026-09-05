@@ -1,4 +1,4 @@
-"""Persistencia: jornadas, descuentos, conceptos, torneos e issues."""
+"""Persistencia: jornadas, descuentos, conceptos e issues."""
 
 from datetime import datetime, timezone
 
@@ -17,17 +17,17 @@ def _dict(fila):
 # ---------------------------------------------------------------- jornadas
 
 def crear_jornada(conn, fecha, estado, partidos_total=None, roles_detalle=None,
-                  bruto=None, torneo_id=None, certeza=Certeza.CONFIRMADO, nota=None):
+                  bruto=None, certeza=Certeza.CONFIRMADO, nota=None):
     errores = validar_jornada(estado, bruto, partidos_total)
     if errores:
         raise ErrorValidacion("; ".join(errores))
     ahora = _ahora()
     cursor = conn.execute(
         "INSERT INTO jornadas (fecha, estado, partidos_total, roles_detalle, bruto,"
-        " torneo_id, certeza, nota, created_at, updated_at)"
-        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        " certeza, nota, created_at, updated_at)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (fecha, Estado(estado).value, partidos_total, roles_detalle, bruto,
-         torneo_id, Certeza(certeza).value, nota, ahora, ahora),
+         Certeza(certeza).value, nota, ahora, ahora),
     )
     conn.commit()
     return cursor.lastrowid
@@ -45,7 +45,7 @@ def actualizar_jornada(conn, jornada_id, cambios):
     if errores:
         raise ErrorValidacion("; ".join(errores))
     columnas = ("fecha", "estado", "partidos_total", "roles_detalle", "bruto",
-                "torneo_id", "certeza", "nota")
+                "certeza", "nota")
     asignaciones, valores = [], []
     for columna in columnas:
         if columna in cambios:
@@ -73,10 +73,10 @@ def eliminar_jornada(conn, jornada_id):
 
 def obtener_jornada(conn, jornada_id):
     fila = conn.execute(
-        "SELECT j.*, t.nombre AS torneo_nombre,"
+        "SELECT j.*,"
         " (SELECT COALESCE(SUM(monto), 0) FROM descuentos d"
         "   WHERE d.jornada_id = j.id) AS total_descuentos"
-        " FROM jornadas j LEFT JOIN torneos t ON t.id = j.torneo_id"
+        " FROM jornadas j"
         " WHERE j.id = ?",
         (jornada_id,),
     ).fetchone()
@@ -84,12 +84,15 @@ def obtener_jornada(conn, jornada_id):
 
 
 def listar_jornadas(conn, fecha_desde=None, fecha_hasta=None, estado=None,
-                    torneo_texto=None, texto_nota=None, limite=None):
+                    texto_nota=None, limite=None, **_compat):
+    # _compat absorbe torneo_texto legacy (alias a nota)
+    if "torneo_texto" in _compat and _compat["torneo_texto"] and not texto_nota:
+        texto_nota = _compat["torneo_texto"]
     consulta = (
-        "SELECT j.*, t.nombre AS torneo_nombre,"
+        "SELECT j.*,"
         " (SELECT COALESCE(SUM(monto), 0) FROM descuentos d"
         "   WHERE d.jornada_id = j.id) AS total_descuentos"
-        " FROM jornadas j LEFT JOIN torneos t ON t.id = j.torneo_id WHERE 1=1"
+        " FROM jornadas j WHERE 1=1"
     )
     valores = []
     if fecha_desde:
@@ -101,9 +104,6 @@ def listar_jornadas(conn, fecha_desde=None, fecha_hasta=None, estado=None,
     if estado:
         consulta += " AND j.estado = ?"
         valores.append(Estado(estado).value)
-    if torneo_texto:
-        consulta += " AND t.nombre LIKE ?"
-        valores.append("%" + torneo_texto + "%")
     if texto_nota:
         consulta += " AND j.nota LIKE ?"
         valores.append("%" + texto_nota + "%")
@@ -234,30 +234,6 @@ def set_concepto_aliases(conn, concepto_id, aliases):
         "UPDATE conceptos_descuento SET aliases = ? WHERE id = ?", (aliases.strip(), concepto_id)
     )
     conn.commit()
-
-
-# ---------------------------------------------------------------- torneos
-
-def listar_torneos(conn):
-    return [dict(f) for f in conn.execute("SELECT * FROM torneos ORDER BY nombre")]
-
-
-def buscar_torneo(conn, texto):
-    fila = conn.execute("SELECT * FROM torneos").fetchall()
-    objetivo = normalizar(texto)
-    for t in fila:
-        if normalizar(t["nombre"]) == objetivo:
-            return dict(t)
-    return None
-
-
-def obtener_o_crear_torneo(conn, nombre):
-    existente = buscar_torneo(conn, nombre)
-    if existente:
-        return existente["id"]
-    cursor = conn.execute("INSERT INTO torneos (nombre) VALUES (?)", (nombre.strip(),))
-    conn.commit()
-    return cursor.lastrowid
 
 
 # ---------------------------------------------------------------- issues

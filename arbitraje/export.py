@@ -49,7 +49,7 @@ def _export_csv(conn, directorio):
         escritor = csv.writer(archivo)
         escritor.writerow([
             "id", "fecha", "estado", "partidos_total", "roles_detalle",
-            "bruto", "total_descuentos", "neto", "torneo", "certeza", "nota",
+            "bruto", "total_descuentos", "neto", "certeza", "nota",
         ])
         for j in repo.listar_jornadas(conn):
             escritor.writerow([
@@ -59,7 +59,6 @@ def _export_csv(conn, directorio):
                 _sanitize(j["bruto"] if j["bruto"] is not None else ""),
                 _sanitize(j["total_descuentos"]),
                 _sanitize(repo.neto_de(j) if repo.neto_de(j) is not None else ""),
-                _sanitize(j.get("torneo_nombre") or ""),
                 _sanitize(j["certeza"]), _sanitize(j["nota"] or ""),
             ])
     _chmod_600(ruta_jornadas)
@@ -99,7 +98,7 @@ def _export_xls(conn, directorio):
     with open(ruta, "w", encoding="utf-8") as f:
         f.write('<html><head><meta charset="utf-8"></head><body>')
         f.write('<h3>Jornadas</h3><table border="1"><tr>')
-        for h in ["id","fecha","estado","partidos","roles","bruto","desc","neto","torneo","certeza","nota"]:
+        for h in ["id","fecha","estado","partidos","roles","bruto","desc","neto","certeza","nota"]:
             f.write(f"<th>{html.escape(h)}</th>")
         f.write("</tr>")
         for j in jornadas:
@@ -108,7 +107,7 @@ def _export_xls(conn, directorio):
             for v in [j["id"], j["fecha"], j["estado"],
                       j["partidos_total"] or "", j["roles_detalle"] or "",
                       j["bruto"] or "", j["total_descuentos"], neto or "",
-                      j.get("torneo_nombre") or "", j["certeza"], j["nota"] or ""]:
+                      j["certeza"], j["nota"] or ""]:
                 f.write(f"<td>{html.escape(_sanitize(v))}</td>")
             f.write("</tr>")
         f.write("</table>")
@@ -150,11 +149,11 @@ def _export_xlsx(conn, directorio):
         xml += '</row>'
         return xml
 
-    header_j = ["id","fecha","estado","partidos","roles","bruto","desc","neto","torneo","certeza","nota"]
+    header_j = ["id","fecha","estado","partidos","roles","bruto","desc","neto","certeza","nota"]
     sheet1_rows = [row_xml(header_j, 1)]
     for i, j in enumerate(jornadas, 2):
         neto = repo.neto_de(j)
-        vals = [j["id"], j["fecha"], j["estado"], j["partidos_total"] or "", j["roles_detalle"] or "", j["bruto"] or "", j["total_descuentos"], neto or "", j.get("torneo_nombre") or "", j["certeza"], j["nota"] or ""]
+        vals = [j["id"], j["fecha"], j["estado"], j["partidos_total"] or "", j["roles_detalle"] or "", j["bruto"] or "", j["total_descuentos"], neto or "", j["certeza"], j["nota"] or ""]
         sheet1_rows.append(row_xml(vals, i))
     sheet1_xml = f'''<?xml version="1.0" encoding="UTF-8"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>{''.join(sheet1_rows)}</sheetData></worksheet>'''
 
