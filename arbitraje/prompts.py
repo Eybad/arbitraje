@@ -97,6 +97,26 @@ def _fmt_float(valor):
 
 
 def pedir_estado(default=Estado.ARBITRADO):
+    # Camino flechas nativas + fallback numerado. Sin TTY devuelve
+    # default (caso seguro con default) en vez de fallar.
+    try:
+        from .selector import seleccionar
+        estados = list(Estado)
+        elegido = seleccionar(
+            "Estado", estados,
+            formato=lambda e: e.value,
+            default=default if default in estados else estados[0],
+            texto="Jornada: qué ocurrió ese día. Solo ARBITRADO genera dinero.",
+            hint='ejecutar en terminal (ej arbitraje add en Termux)',
+            usar_default_sin_tty=True,
+        )
+        if elegido is not None:
+            return elegido
+        return default
+    except SystemExit:
+        raise
+    except Exception:
+        pass
     nombres = ", ".join(e.value for e in Estado)
     while True:
         texto = _leer("Estado [%s]: " % default.value)
@@ -126,6 +146,22 @@ def pedir_certeza(default="CONFIRMADO"):
 
 
 def confirmar(prompt, default=True):
+    # Flechas Sí/No nativas. Sin TTY: fail-closed con error+hint
+    # (no auto-confirma un Guardar/Borrar en pipe/CI).
+    try:
+        from .selector import confirmar_flechas
+        resultado = confirmar_flechas(
+            prompt, default=default,
+            hint="confirmar en terminal (ej ejecutar en Termux sin pipe)",
+        )
+        if resultado is None:
+            # Esc/q en diálogo = cancelar → False seguro (no guarda/borra)
+            return False
+        return resultado
+    except SystemExit:
+        raise
+    except Exception:
+        pass
     sugerencia = "S/n" if default else "s/N"
     while True:
         texto = _leer("%s [%s]: " % (prompt, sugerencia)).lower()
@@ -142,6 +178,19 @@ def elegir_de_lista(prompt, opciones, formato=str):
     """opciones: lista de valores; devuelve el elegido o None si cancela."""
     if not opciones:
         return None
+    # Delegar en selector (flechas opt-in + fallback Panel Rich).
+    try:
+        from .selector import seleccionar
+        return seleccionar(
+            prompt, list(opciones), formato=formato, default=None,
+            texto="↑↓ + Enter elige · Esc cancela",
+            hint="elegir en terminal (ej ejecutar en Termux sin pipe)",
+            usar_default_sin_tty=False,
+        )
+    except SystemExit:
+        raise
+    except Exception:
+        pass
     for indice, opcion in enumerate(opciones, 1):
         if _use_color():
             _cprint(f"  [cyan]{indice:2d})[/] [white]{formato(opcion)}[/]")
@@ -151,6 +200,11 @@ def elegir_de_lista(prompt, opciones, formato=str):
         texto = _leer("%s [1-%d, vacío cancela]: " % (prompt, len(opciones)))
         if not texto:
             return None
-        if texto.isdigit() and 1 <= int(texto) <= len(opciones):
-            return opciones[int(texto) - 1]
+        if texto.isdigit() and len(texto) <= 6:
+            try:
+                numero = int(texto)
+            except ValueError:
+                numero = 0
+            if 1 <= numero <= len(opciones):
+                return opciones[numero - 1]
         _cerr("  opción inválida")

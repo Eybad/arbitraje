@@ -77,8 +77,21 @@ def _err(msg):
 
 def run(conn):
     while True:
-        print_menu("ARBITRAJE", MENU_OPTS)
-        opcion = _leer("Opcion: ")
+        try:
+            from .selector import seleccionar_clave
+            opcion = seleccionar_clave(
+                "ARBITRAJE", MENU_OPTS, default_clave="1",
+                texto="↑↓ + Enter elige · 8 sale",
+                hint="ejecutar en terminal (ej arbitraje en Termux sin pipe)",
+                usar_default_sin_tty=False,
+            )
+        except SystemExit:
+            raise
+        except Exception:
+            print_menu("ARBITRAJE", MENU_OPTS)
+            opcion = _leer("Opcion: ")
+        if opcion is None:
+            continue  # ESC en el primero: no hace nada
         if opcion == "1":
             registrar(conn)
         elif opcion == "2":
@@ -190,8 +203,16 @@ def historial(conn):
 
 
 def buscar(conn):
-    print_menu("Buscar", [("1","rango de fechas"),("2","estado"),("3","texto en nota"),("4","todo")])
-    opcion = _leer("Criterio: ")
+    from .selector import seleccionar_clave
+    opcion = seleccionar_clave(
+        "Buscar", [("1", "rango de fechas"), ("2", "estado"),
+                   ("3", "texto en nota"), ("4", "todo")],
+        default_clave="4",
+        texto="↑↓ + Enter elige · Esc vuelve",
+        hint="buscar en terminal (ej arbitraje en Termux sin pipe)",
+    )
+    if opcion is None:
+        return  # ESC: vuelve al menú anterior
     filtros = {}
     if opcion == "1":
         desde = pedir_fecha("Desde", None)
@@ -208,8 +229,11 @@ def buscar(conn):
 
 
 def _ver_detalle_opcional(conn):
-    texto = _leer("Ver detalle (id o Enter): ")
-    if texto.isdigit():
+    from .selector import leer_linea
+    texto = leer_linea("Ver detalle (id o Enter · Esc vuelve): ")
+    if texto is None:
+        return
+    if texto.isdigit() and len(texto) <= 6:
         jornada = repo.obtener_jornada(conn, int(texto))
         if jornada:
             vista.detalle_jornada(conn, jornada)
@@ -221,8 +245,9 @@ def _ver_detalle_opcional(conn):
 
 def editar(conn, jornada_id=None):
     if jornada_id is None:
-        texto = _leer("Id de la jornada: ")
-        if not texto.isdigit():
+        from .selector import leer_linea
+        texto = leer_linea("Id de la jornada (Esc vuelve): ")
+        if texto is None or not texto.isdigit() or len(texto) > 6:
             return
         jornada_id = int(texto)
     jornada = repo.obtener_jornada(conn, jornada_id)
@@ -231,8 +256,19 @@ def editar(conn, jornada_id=None):
         return
     vista.detalle_jornada(conn, jornada)
     cambios = {}
+    from .selector import seleccionar_clave as _elegir_campo
     while True:
-        campo = _leer("[cyan][f][/]echa [cyan][e][/]stado [cyan][p][/]artidos [cyan][b][/]ruto [cyan][n][/]ota [cyan][c][/]erteza [cyan][d][/]escuentos [green][g][/]uardar [red][k]BORRAR[/] [yellow][x]salir[/]: ").lower()
+        campo = _elegir_campo(
+            "Editar #%d" % jornada_id,
+            [("f", "Fecha"), ("e", "Estado"), ("p", "Partidos"),
+             ("b", "Bruto"), ("n", "Nota"), ("c", "Certeza"),
+             ("d", "Descuentos"), ("g", "Guardar"), ("k", "BORRAR"),
+             ("x", "Salir")],
+            texto="↑↓ + Enter elige · Esc sale sin guardar",
+            hint="editar en terminal (ej arbitraje en Termux sin pipe)",
+        )
+        if campo is None:
+            campo = "x"  # ESC: igual que salir
         try:
             if campo == "f":
                 cambios["fecha"] = pedir_fecha("Fecha").isoformat()
@@ -256,7 +292,8 @@ def editar(conn, jornada_id=None):
                 return
             elif campo == "k":
                 if confirmar("Borrar jornada #%d? Esta acción no se puede deshacer" % jornada_id, default=False):
-                    if _leer("Escriba SI para confirmar: ") == "SI":
+                    from .selector import leer_linea
+                    if leer_linea("Escriba SI para confirmar (Esc cancela): ") == "SI":
                         try:
                             from .db import respaldar
                             bkp = respaldar()
@@ -278,11 +315,21 @@ def editar(conn, jornada_id=None):
 
 
 def _editar_descuentos(conn, jornada_id):
+    from .selector import seleccionar_clave as _elegir_accion
     while True:
         descuentos = repo.descuentos_de(conn, jornada_id)
         for d in descuentos:
             cprint(f"  [dim]#{d['id']}[/] [white]{d['concepto_nombre']:<10}[/] [red]-{d['monto']:>5} Bs[/] {d['nota'] or ''}")
-        opcion = _leer("[cyan][a][/]gregar [cyan][e][/]ditar monto [cyan][b][/]orrar [cyan][v][/]olver: ").lower()
+        opcion = _elegir_accion(
+            "Descuentos #%d" % jornada_id,
+            [("a", "Agregar"), ("e", "Editar monto"), ("b", "Borrar"),
+             ("v", "Volver")],
+            default_clave="v",
+            texto="↑↓ + Enter elige · Esc vuelve",
+            hint="editar en terminal (ej arbitraje en Termux sin pipe)",
+        )
+        if opcion is None:
+            return  # ESC: vuelve al menú anterior
         if opcion == "a":
             conceptos = repo.listar_conceptos(conn, solo_activos=True)
             concepto = elegir_de_lista("Concepto", conceptos,
@@ -312,8 +359,9 @@ def _editar_descuentos(conn, jornada_id):
 
 def eliminar(conn, jornada_id=None):
     if jornada_id is None:
-        texto = _leer("Id de la jornada: ")
-        if not texto.isdigit():
+        from .selector import leer_linea
+        texto = leer_linea("Id de la jornada (Esc vuelve): ")
+        if texto is None or not texto.isdigit() or len(texto) > 6:
             return
         jornada_id = int(texto)
     jornada = repo.obtener_jornada(conn, jornada_id)
@@ -321,7 +369,8 @@ def eliminar(conn, jornada_id=None):
         _err("(id inexistente)")
         return
     vista.detalle_jornada(conn, jornada)
-    respuesta = _leer("Escriba SI para eliminar: ")
+    from .selector import leer_linea as _leer_si
+    respuesta = _leer_si("Escriba SI para eliminar (Esc cancela): ")
     if respuesta == "SI":
         try:
             from .db import respaldar
@@ -337,11 +386,18 @@ def eliminar(conn, jornada_id=None):
 # ---------------------------------------------------------------- estadisticas
 
 def estadisticas(conn):
+    from .selector import seleccionar_clave
     while True:
-        print_menu("Estadisticas", [("1","resumen"),("2","por mes"),("3","por anio"),("4","descuentos por concepto"),("5","mejores jornadas"),("6","jornadas por estado"),("0","volver")])
-        opcion = _leer("Opcion: ")
-        if opcion == "0":
-            return
+        opcion = seleccionar_clave(
+            "Estadisticas",
+            [("1", "resumen"), ("2", "por mes"), ("3", "por anio"),
+             ("4", "descuentos por concepto"), ("5", "mejores jornadas"),
+             ("6", "jornadas por estado"), ("0", "volver")],
+            texto="↑↓ + Enter elige · Esc vuelve",
+            hint="ver estadísticas en terminal (ej arbitraje en Termux sin pipe)",
+        )
+        if opcion is None or opcion == "0":
+            return  # ESC: vuelve al menú anterior
         if opcion == "1":
             desde, hasta = _pedir_rango()
             stats.imprimir_resumen(stats.resumen_general(conn, desde, hasta))
@@ -434,7 +490,15 @@ def review(conn):
     if elegido.get("payload"):
         datos = json.loads(elegido["payload"])
         cprint(f"datos     : [dim]{json.dumps(datos, ensure_ascii=False)}[/]")
-    opcion = _leer("[green][r][/]esuelta [cyan][a][/]lta manual [dim][Enter] dejar pendiente[/]: ").lower()
+    from .selector import seleccionar_clave
+    opcion = seleccionar_clave(
+        "Issue #%d" % elegido["id"],
+        [("r", "Marcar resuelta"), ("a", "Alta manual"),
+         ("p", "Dejar pendiente")],
+        default_clave="p",
+        texto="↑↓ + Enter elige · Esc deja pendiente",
+        hint="revisar en terminal (ej arbitraje en Termux sin pipe)",
+    )
     if opcion == "r":
         repo.marcar_issue_resuelta(conn, elegido["id"])
         _ok("marcada resuelta")
@@ -455,23 +519,37 @@ def review(conn):
 # ---------------------------------------------------------------- configuración
 
 def configuracion(conn):
+    from .selector import seleccionar_clave
     while True:
-        print_menu("Configuracion", [("1","conceptos"),("0","volver")])
-        opcion = _leer("Opcion: ")
-        if opcion == "0":
-            return
+        opcion = seleccionar_clave(
+            "Configuracion", [("1", "conceptos"), ("0", "volver")],
+            texto="↑↓ + Enter elige · Esc vuelve",
+            hint="configurar en terminal (ej arbitraje en Termux sin pipe)",
+        )
+        if opcion is None or opcion == "0":
+            return  # ESC: vuelve al menú anterior
         if opcion == "1":
             _config_conceptos(conn)
 
 
 def _config_conceptos(conn):
+    from .selector import seleccionar_clave as _elegir_concepto
     while True:
         conceptos = repo.listar_conceptos(conn)
         for c in conceptos:
             estado = "activo" if c["activo"] else "INACTIVO"
             col = "green" if c["activo"] else "red"
             cprint(f"  [dim]#{c['id']:<-2d}[/] [white]{c['nombre']:<10}[/] def=[yellow]{c['default_monto']:<-3d}[/] [{col}]{estado}[/]  aliases: [dim]{c['aliases'] or '-'}[/]")
-        opcion = _leer("[cyan][c][/]rear [cyan][r][/]enombrar [cyan][a][/]ctivar/desactivar [cyan][d][/]efault [cyan][l][/]aliases [cyan][v][/]olver: ").lower()
+        opcion = _elegir_concepto(
+            "Conceptos",
+            [("c", "Crear"), ("r", "Renombrar"), ("a", "Activar/desactivar"),
+             ("d", "Default"), ("l", "Aliases"), ("v", "Volver")],
+            default_clave="v",
+            texto="↑↓ + Enter elige · Esc vuelve",
+            hint="configurar en terminal (ej arbitraje en Termux sin pipe)",
+        )
+        if opcion is None:
+            return  # ESC: vuelve al menú anterior
         if opcion == "v":
             return
         if opcion == "c":
@@ -502,10 +580,15 @@ def _config_conceptos(conn):
 
 
 def exportar_menu(conn):
-    print_menu("Exportar", [("1","CSV"),("2","XLSX"),("3","XLS"),("0","volver")])
-    opcion = _leer("Formato: ")
-    if opcion not in ("1", "2", "3"):
-        return
+    from .selector import seleccionar_clave
+    opcion = seleccionar_clave(
+        "Exportar", [("1", "CSV"), ("2", "XLSX"), ("3", "XLS"),
+                     ("0", "volver")],
+        texto="↑↓ + Enter elige · Esc vuelve",
+        hint="exportar en terminal (ej arbitraje en Termux sin pipe)",
+    )
+    if opcion is None or opcion not in ("1", "2", "3"):
+        return  # ESC: vuelve al menú anterior
     directorio = pedir_texto("Directorio destino", ".")
     formatos = {"1": "csv", "2": "xlsx", "3": "xls"}
     formato = formatos[opcion]
