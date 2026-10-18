@@ -6,12 +6,13 @@ import sys
 
 from . import db, export, importador, menu, repo, stats, vista
 from .modelos import Estado
+from .validacion import ErrorValidacion
 
 __version__ = "2.0.0"
 
 
 def _es_plain(args):
-    return bool(getattr(args, "plain", False))
+    return True if getattr(args, "plain", False) else None
 
 
 def _salida_tabla(jornadas, plain=False, json_out=False):
@@ -35,7 +36,7 @@ def _construir_parser():
         prog="arbitraje",
         description="Registro y análisis de ingresos por arbitraje. Ejemplos: arbitraje add | arbitraje list --desde 2025-01-01 | arbitraje search --nota \"[Torneo:\"",
     )
-    parser.add_argument("--version", action="version", version="%%(prog)s %s" % __version__)
+    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     sub = parser.add_subparsers(dest="comando")
 
     sub.add_parser("add", help="registrar jornada (interactivo)")
@@ -80,9 +81,13 @@ def _construir_parser():
 
     sub.add_parser("review", help="revisar excepciones de importación")
 
-    p_export = sub.add_parser("export", help="exportar (csv/xlsx/xls)")
+    p_export = sub.add_parser("export", help="exportar (csv/xlsx/json/jsonl)")
     p_export.add_argument("directorio", nargs="?", default=".")
-    p_export.add_argument("--formato", default="csv", choices=["csv","xlsx","xls"], help="formato de salida")
+    p_export.add_argument("--formato", default="csv", choices=["csv", "xlsx", "json", "jsonl", "xls"], help="formato de salida")
+    p_export.add_argument("--desde", default=None, help="fecha desde AAAA-MM-DD")
+    p_export.add_argument("--hasta", default=None, help="fecha hasta AAAA-MM-DD")
+    p_export.add_argument("--estado", default=None, help="filtrar por estado (ej ARBITRADO)")
+    p_export.add_argument("--nota", default=None, help="filtrar por texto en nota")
 
     sub.add_parser("config", help="configurar conceptos de descuento")
 
@@ -90,11 +95,27 @@ def _construir_parser():
 
 
 def main(argv=None):
+    import os
     parser = _construir_parser()
     args = parser.parse_args(argv)
     conn = db.conectar()
     try:
         _despachar(conn, args, parser)
+    except KeyboardInterrupt:
+        print("", file=sys.stderr)
+        sys.exit(130)
+    except BrokenPipeError:
+        devnull = os.open(os.devnull, os.O_WRONLY)
+        os.dup2(devnull, sys.stdout.fileno())
+        sys.exit(141)
+    except (ErrorValidacion, ValueError) as err:
+        print("error: %s" % err, file=sys.stderr)
+        sys.exit(2)
+    except SystemExit:
+        raise
+    except Exception as err:
+        print("error inesperado: %s" % err, file=sys.stderr)
+        sys.exit(1)
     finally:
         conn.close()
 
@@ -132,15 +153,27 @@ def _despachar(conn, args, parser):
     elif comando == "stats":
         _stats_no_interactivo(conn, args)
     elif comando == "edit":
+        if not repo.obtener_jornada(conn, args.id):
+            print("error: jornada #%d inexistente" % args.id, file=sys.stderr)
+            sys.exit(1)
         menu.editar(conn, args.id)
     elif comando == "delete":
+        if not repo.obtener_jornada(conn, args.id):
+            print("error: jornada #%d inexistente" % args.id, file=sys.stderr)
+            sys.exit(1)
         menu.eliminar(conn, args.id)
     elif comando == "import":
         _importar(conn, args)
     elif comando == "review":
         menu.review(conn)
     elif comando == "export":
-        rutas = export.exportar(conn, args.directorio, formato=args.formato)
+        fmt = "xlsx" if args.formato == "xls" else args.formato
+        rutas = export.exportar(
+            conn, args.directorio, formato=fmt,
+            fecha_desde=args.desde, fecha_hasta=args.hasta,
+            estado=Estado(args.estado) if args.estado else None,
+            texto_nota=args.nota,
+        )
         for ruta in rutas:
             print(ruta)
     elif comando == "config":

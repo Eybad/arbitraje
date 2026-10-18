@@ -582,15 +582,15 @@ def _config_conceptos(conn):
 def exportar_menu(conn):
     from .selector import seleccionar_clave
     opcion = seleccionar_clave(
-        "Exportar", [("1", "CSV"), ("2", "XLSX"), ("3", "XLS"),
+        "Exportar", [("1", "CSV"), ("2", "XLSX"), ("3", "JSON"), ("4", "JSONL"),
                      ("0", "volver")],
         texto="↑↓ + Enter elige · Esc vuelve",
         hint="exportar en terminal (ej arbitraje en Termux sin pipe)",
     )
-    if opcion is None or opcion not in ("1", "2", "3"):
+    if opcion is None or opcion not in ("1", "2", "3", "4"):
         return  # ESC: vuelve al menú anterior
     directorio = pedir_texto("Directorio destino", ".")
-    formatos = {"1": "csv", "2": "xlsx", "3": "xls"}
+    formatos = {"1": "csv", "2": "xlsx", "3": "json", "4": "jsonl"}
     formato = formatos[opcion]
     try:
         rutas = export.exportar(conn, directorio, formato=formato)
