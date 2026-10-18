@@ -619,26 +619,27 @@ def _calcular_bruto(c):
 def aplicar(resultado, conn):
     """Inserta candidatos no bloqueados y vuelca issues. Devuelve contadores."""
     conteo = {"jornadas": 0, "descuentos": 0, "issues": 0}
-    for c in resultado.candidatos:
-        if c.bloqueado:
-            continue
-        jid = repo.crear_jornada(
-            conn, c.fecha.isoformat(), c.estado,
-            partidos_total=c.partidos, roles_detalle=c.roles_detalle,
-            bruto=c.bruto, certeza=c.certeza,
-            nota="; ".join(c.notas) or None,
-        )
-        conteo["jornadas"] += 1
-        for datos in c.descuentos.values():
-            repo.agregar_descuento(
-                conn, jid, datos["id"], datos["monto"],
-                nota=", ".join(datos["notas"]) or None,
+    with conn:
+        for c in resultado.candidatos:
+            if c.bloqueado:
+                continue
+            jid = repo.crear_jornada(
+                conn, c.fecha.isoformat(), c.estado,
+                partidos_total=c.partidos, roles_detalle=c.roles_detalle,
+                bruto=c.bruto, certeza=c.certeza,
+                nota="; ".join(c.notas) or None,
             )
-            conteo["descuentos"] += 1
-    for issue in resultado.issues:
-        repo.crear_issue(conn, issue["linea"], issue["problema"],
-                         issue["sugerencia"], issue["payload"])
-        conteo["issues"] += 1
+            conteo["jornadas"] += 1
+            for datos in c.descuentos.values():
+                repo.agregar_descuento(
+                    conn, jid, datos["id"], datos["monto"],
+                    nota=", ".join(datos["notas"]) or None,
+                )
+                conteo["descuentos"] += 1
+        for issue in resultado.issues:
+            repo.crear_issue(conn, issue["linea"], issue["problema"],
+                             issue["sugerencia"], issue["payload"])
+            conteo["issues"] += 1
     return conteo
 
 

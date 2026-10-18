@@ -64,8 +64,8 @@ def db_path():
     """Ruta de la base: ARBITRAJE_DB o ~/.local/share/arbitraje/arbitraje.db."""
     entorno = os.environ.get("ARBITRAJE_DB")
     if entorno:
-        return Path(entorno).expanduser()
-    return Path.home() / ".local" / "share" / "arbitraje" / "arbitraje.db"
+        return Path(entorno).expanduser().resolve()
+    return (Path.home() / ".local" / "share" / "arbitraje" / "arbitraje.db").resolve()
 
 
 def _chmod_600(path):
@@ -84,14 +84,23 @@ def _chmod_700(path):
 
 def conectar(ruta=None):
     """Abre la base, aplica esquema y semillas. foreign_keys siempre ON."""
-    ruta = Path(ruta) if ruta else db_path()
+    if ruta and str(ruta) == ":memory:":
+        conn = sqlite3.connect(":memory:", timeout=5.0)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys = ON")
+        inicializar(conn)
+        return conn
+
+    ruta = Path(ruta).resolve() if ruta else db_path()
     ruta.parent.mkdir(parents=True, exist_ok=True)
     _chmod_700(ruta.parent)
-    conn = sqlite3.connect(str(ruta))
+    conn = sqlite3.connect(str(ruta), timeout=5.0)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA journal_mode = WAL")
+    conn.execute("PRAGMA busy_timeout = 5000")
+    conn.execute("PRAGMA synchronous = NORMAL")
     inicializar(conn)
-    # hardening: DB 0600 best-effort (umask puede dejar 644)
     _chmod_600(ruta)
     return conn
 
@@ -143,29 +152,33 @@ def _migrar_1_a_2(conn):
         try:
             conn.execute("ALTER TABLE jornadas DROP COLUMN torneo_id")
         except Exception:
-            # Fallback: recrear tabla sin torneo_id (para SQLite viejo)
-            conn.executescript("""
-                CREATE TABLE IF NOT EXISTS jornadas_new (
-                    id             INTEGER PRIMARY KEY,
-                    fecha          TEXT NOT NULL,
-                    estado         TEXT NOT NULL CHECK (estado IN (
-                        'ARBITRADO', 'NO_DESIGNADO', 'NO_HUBO', 'LLUVIA', 'ELECCIONES',
-                        'VIAJE', 'DESCANSO', 'RECHAZADO', 'SIN_DATOS', 'OTRO', 'FERIADO')),
-                    partidos_total REAL CHECK (partidos_total IS NULL OR partidos_total >= 0),
-                    roles_detalle  TEXT,
-                    bruto          INTEGER CHECK (bruto IS NULL OR bruto >= 0),
-                    certeza        TEXT NOT NULL DEFAULT 'CONFIRMADO'
-                                   CHECK (certeza IN ('CONFIRMADO', 'PROBABLE', 'DUDOSO')),
-                    nota           TEXT,
-                    created_at     TEXT NOT NULL,
-                    updated_at     TEXT NOT NULL
-                );
-                INSERT INTO jornadas_new (id, fecha, estado, partidos_total, roles_detalle, bruto, certeza, nota, created_at, updated_at)
-                    SELECT id, fecha, estado, partidos_total, roles_detalle, bruto, certeza, nota, created_at, updated_at FROM jornadas;
-                DROP TABLE jornadas;
-                ALTER TABLE jornadas_new RENAME TO jornadas;
-                CREATE INDEX IF NOT EXISTS idx_jornadas_fecha ON jornadas(fecha);
-            """)
+            # Fallback seguro: desactivar foreign keys durante la reconstrucción
+            conn.execute("PRAGMA foreign_keys = OFF")
+            try:
+                conn.executescript("""
+                    CREATE TABLE IF NOT EXISTS jornadas_new (
+                        id             INTEGER PRIMARY KEY,
+                        fecha          TEXT NOT NULL,
+                        estado         TEXT NOT NULL CHECK (estado IN (
+                            'ARBITRADO', 'NO_DESIGNADO', 'NO_HUBO', 'LLUVIA', 'ELECCIONES',
+                            'VIAJE', 'DESCANSO', 'RECHAZADO', 'SIN_DATOS', 'OTRO', 'FERIADO')),
+                        partidos_total REAL CHECK (partidos_total IS NULL OR partidos_total >= 0),
+                        roles_detalle  TEXT,
+                        bruto          INTEGER CHECK (bruto IS NULL OR bruto >= 0),
+                        certeza        TEXT NOT NULL DEFAULT 'CONFIRMADO'
+                                       CHECK (certeza IN ('CONFIRMADO', 'PROBABLE', 'DUDOSO')),
+                        nota           TEXT,
+                        created_at     TEXT NOT NULL,
+                        updated_at     TEXT NOT NULL
+                    );
+                    INSERT INTO jornadas_new (id, fecha, estado, partidos_total, roles_detalle, bruto, certeza, nota, created_at, updated_at)
+                        SELECT id, fecha, estado, partidos_total, roles_detalle, bruto, certeza, nota, created_at, updated_at FROM jornadas;
+                    DROP TABLE jornadas;
+                    ALTER TABLE jornadas_new RENAME TO jornadas;
+                    CREATE INDEX IF NOT EXISTS idx_jornadas_fecha ON jornadas(fecha);
+                """)
+            finally:
+                conn.execute("PRAGMA foreign_keys = ON")
     if "torneos" in tablas:
         conn.execute("DROP TABLE IF EXISTS torneos")
 
@@ -179,12 +192,19 @@ def _sembrar(conn):
         )
 
 
-def respaldar(ruta=None):
-    """Copia timestamped de la base; devuelve la ruta del backup."""
-    import shutil
+def respaldar(conn=None, ruta=None):
+    """Copia atómica consistente usando la API de backup online de SQLite."""
     import time
-    ruta = Path(ruta) if ruta else db_path()
+    ruta = Path(ruta).resolve() if ruta else db_path()
     destino = Path(str(ruta) + ".bak-" + time.strftime("%Y%m%d-%H%M%S"))
-    shutil.copy2(str(ruta), str(destino))
+    bck = sqlite3.connect(str(destino))
+    try:
+        if conn is not None:
+            conn.backup(bck)
+        else:
+            with sqlite3.connect(str(ruta)) as src:
+                src.backup(bck)
+    finally:
+        bck.close()
     _chmod_600(destino)
     return destino
