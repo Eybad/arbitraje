@@ -3,7 +3,7 @@
 from datetime import datetime, timezone
 
 from .modelos import Estado, Certeza, validar_jornada, calcular_neto, normalizar
-from .validacion import ErrorValidacion
+from .validacion import parse_fecha, ErrorValidacion
 
 
 def _ahora():
@@ -18,6 +18,7 @@ def _dict(fila):
 
 def crear_jornada(conn, fecha, estado, partidos_total=None, roles_detalle=None,
                   bruto=None, certeza=Certeza.CONFIRMADO, nota=None):
+    fecha_iso = parse_fecha(str(fecha)).isoformat()
     errores = validar_jornada(estado, bruto, partidos_total)
     if errores:
         raise ErrorValidacion("; ".join(errores))
@@ -26,7 +27,7 @@ def crear_jornada(conn, fecha, estado, partidos_total=None, roles_detalle=None,
         "INSERT INTO jornadas (fecha, estado, partidos_total, roles_detalle, bruto,"
         " certeza, nota, created_at, updated_at)"
         " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        (fecha, Estado(estado).value, partidos_total, roles_detalle, bruto,
+        (fecha_iso, Estado(estado).value, partidos_total, roles_detalle, bruto,
          Certeza(certeza).value, nota, ahora, ahora),
     )
     conn.commit()
@@ -38,6 +39,8 @@ def actualizar_jornada(conn, jornada_id, cambios):
     actual = obtener_jornada(conn, jornada_id)
     if actual is None:
         raise ErrorValidacion("jornada %s no existe" % jornada_id)
+    if "fecha" in cambios and cambios["fecha"] is not None:
+        cambios["fecha"] = parse_fecha(str(cambios["fecha"])).isoformat()
     estado = cambios.get("estado", actual["estado"])
     bruto = cambios.get("bruto", actual["bruto"])
     partidos = cambios.get("partidos_total", actual["partidos_total"])

@@ -58,12 +58,22 @@ class TestMontosYPartidos(unittest.TestCase):
             parse_monto("-5")
         with self.assertRaises(ErrorValidacion):
             parse_monto("abc")
+        with self.assertRaises(ErrorValidacion):
+            parse_monto("10.50")
+        with self.assertRaises(ErrorValidacion):
+            parse_monto("10,5")
+        with self.assertRaises(ErrorValidacion):
+            parse_monto("10" * 20)
 
     def test_partidos_fraccionarios(self):
         self.assertEqual(parse_partidos("2.5"), 2.5)
         self.assertEqual(parse_partidos("2,5"), 2.5)
         with self.assertRaises(ErrorValidacion):
             parse_partidos("-1")
+        with self.assertRaises(ErrorValidacion):
+            parse_partidos("nan")
+        with self.assertRaises(ErrorValidacion):
+            parse_partidos("inf")
 
 
 if __name__ == "__main__":
