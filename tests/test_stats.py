@@ -48,6 +48,10 @@ class TestStats(unittest.TestCase):
         self.assertEqual(filas[0]["concepto"], "Asesoría")
         self.assertEqual(filas[0]["total"], 10)
 
+    def tearDown(self):
+        if hasattr(self, "conn") and self.conn:
+            self.conn.close()
+
     def test_mejores_jornadas_orden_descendente(self):
         filas = stats.mejores_jornadas(self.conn, 5)
         self.assertEqual(filas[0]["fecha"], "2025-02-02")
@@ -59,9 +63,12 @@ class TestStats(unittest.TestCase):
         self.assertEqual(resumen["neto"], 260)
 
     def test_render_no_explota_con_vacio(self):
-        stats.imprimir_tabla_estadistica("VACIO", [])
-        stats.imprimir_descuentos_por_concepto([])
-        stats.imprimir_resumen({})
+        import io
+        from unittest.mock import patch
+        with patch("sys.stdout", io.StringIO()):
+            stats.imprimir_tabla_estadistica("VACIO", [])
+            stats.imprimir_descuentos_por_concepto([])
+            stats.imprimir_resumen({})
 
 
 if __name__ == "__main__":

@@ -141,8 +141,14 @@ class TestLeerLinea(unittest.TestCase):
 
         def fake_select(r, w, x, timeout=None):
             return ([r], [], []) if datos else ([], [], [])
-        with patch.object(selector, "es_tty", return_value=tty), \
+
+        def input_no_permitido(*args, **kwargs):
+            raise AssertionError("leer_linea derivo a builtins.input en modo raw")
+
+        with patch.dict(selector.os.environ, {"TERM": "xterm-256color"}), \
+             patch.object(selector, "es_tty", return_value=tty), \
              patch.object(selector, "_salida_tty", return_value=salida_tty), \
+             patch("builtins.input", side_effect=input_no_permitido), \
              patch("termios.tcgetattr", return_value="a"), \
              patch("termios.tcsetattr"), \
              patch("tty.setraw"), \
@@ -150,6 +156,15 @@ class TestLeerLinea(unittest.TestCase):
              patch("select.select", side_effect=fake_select), \
              patch("sys.stdout", io.StringIO()):
             return selector.leer_linea("Id: ")
+
+    def test_term_dumb_deriva_a_input(self):
+        with patch.dict(selector.os.environ, {"TERM": "dumb"}), \
+             patch.object(selector, "es_tty", return_value=True), \
+             patch.object(selector, "_salida_tty", return_value=True), \
+             patch("builtins.input", return_value="42") as m_input, \
+             patch("sys.stdout", io.StringIO()):
+            self.assertEqual(selector.leer_linea("Id: "), "42")
+            m_input.assert_called_once_with("Id: ")
 
     def test_esc_solo_cancela(self):
         self.assertIsNone(self._linea_con([b"\x1b"]))
@@ -176,7 +191,8 @@ class TestLeerLinea(unittest.TestCase):
                 self.assertEqual(selector.leer_linea("Id: "), "7")
 
     def test_eof_es_130(self):
-        with patch.object(selector, "es_tty", return_value=True), \
+        with patch.dict(selector.os.environ, {"TERM": "xterm-256color"}), \
+             patch.object(selector, "es_tty", return_value=True), \
              patch.object(selector, "_salida_tty", return_value=True), \
              patch("termios.tcgetattr", return_value="a"), \
              patch("termios.tcsetattr"), \
@@ -213,10 +229,11 @@ class TestPtyReal(unittest.TestCase):
                 caja["e"] = repr(e)
         hilo = threading.Thread(target=objetivo)
         try:
-            hilo.start()
-            escritor(m)
-            hilo.join(10)
-            self.assertFalse(hilo.is_alive(), "se colgó esperando tecla")
+            with patch.dict(_os.environ, {"TERM": "xterm-256color"}):
+                hilo.start()
+                escritor(m)
+                hilo.join(5)
+                self.assertFalse(hilo.is_alive(), "se colgó esperando tecla")
         finally:
             _sys.stdin, _sys.stdout = real_in, real_out
             try:

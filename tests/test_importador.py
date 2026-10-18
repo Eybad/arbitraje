@@ -73,6 +73,10 @@ class TestImportador(unittest.TestCase):
         self.conn = conectar(":memory:")
         self.mapas = importador.Mapas(self.conn)
 
+    def tearDown(self):
+        if hasattr(self, "conn") and self.conn:
+            self.conn.close()
+
     def _parsear(self, texto, ano=2024):
         return importador.parsear(texto, self.mapas, ano_inicial=ano)
 
