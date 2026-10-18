@@ -140,6 +140,12 @@ def _leer_tecla():
             raise EOFError
         if primero == b"\x03":
             raise KeyboardInterrupt
+        if primero == b"\x1a":
+            import signal
+            termios.tcsetattr(fd, termios.TCSADRAIN, attrs)
+            os.kill(os.getpid(), signal.SIGTSTP)
+            tty.setraw(fd)
+            return ("OTRA", None)
         if primero in (b"\r", b"\n"):
             return ("ENTER", None)
         if primero in (b"q", b"Q"):
@@ -160,8 +166,8 @@ def _leer_tecla():
             import select as _select
             import time as _time
             resto = b""
-            plazo = _time.monotonic() + 0.15
-            while len(resto) < 4:
+            plazo = _time.monotonic() + 0.08
+            while len(resto) < 8:
                 queda = plazo - _time.monotonic()
                 if queda <= 0:
                     break
@@ -172,10 +178,9 @@ def _leer_tecla():
                 if not trozo:
                     break
                 resto += trozo
-                if resto in (b"[A", b"[B", b"[C", b"[D", b"[H", b"[F",
-                            b"OA", b"OB", b"OC", b"OD", b"OH", b"OF"):
+                if len(resto) == 2 and resto[:1] == b"O":
                     break
-                if len(resto) >= 2 and resto[:1] == b"[" and resto[-1:].isalpha():
+                if len(resto) >= 2 and resto[:1] == b"[" and 0x40 <= resto[-1] <= 0x7E:
                     break
             if resto in (b"[A", b"OA"):
                 return ("UP", None)
@@ -408,6 +413,14 @@ def leer_linea(prompt, hint=""):
             if ch == b"\x03":
                 sys.stdout.write("\r\n")
                 raise SystemExit(130)
+            if ch == b"\x1a":
+                import signal
+                termios.tcsetattr(fd, termios.TCSADRAIN, attrs)
+                os.kill(os.getpid(), signal.SIGTSTP)
+                tty.setraw(fd)
+                sys.stdout.write("\r\x1b[2K%s%s" % (prompt, texto))
+                sys.stdout.flush()
+                continue
             if ch in (b"\r", b"\n"):
                 sys.stdout.write("\r\n")
                 sys.stdout.flush()
@@ -425,9 +438,9 @@ def leer_linea(prompt, hint=""):
                 continue
             if ch == b"\x1b":
                 # ¿ESC solo (cancela) o secuencia (se ignora)?
-                plazo = _time.monotonic() + 0.15
+                plazo = _time.monotonic() + 0.08
                 resto = b""
-                while len(resto) < 4:
+                while len(resto) < 8:
                     queda = plazo - _time.monotonic()
                     if queda <= 0:
                         break
@@ -438,12 +451,16 @@ def leer_linea(prompt, hint=""):
                     if not trozo:
                         break
                     resto += trozo
-                    if len(resto) >= 2 and resto[-1:].isalpha():
+                    if len(resto) == 2 and resto[:1] == b"O":
+                        break
+                    if len(resto) >= 2 and resto[:1] == b"[" and 0x40 <= resto[-1] <= 0x7E:
                         break
                 if resto == b"":
                     sys.stdout.write("\r\n")
                     sys.stdout.flush()
                     return None
+                continue
+            if not pendiente and (ch[0] & 0xC0 == 0x80 or ch[0] > 0xF4):
                 continue
             pendiente += ch
             try:
@@ -452,7 +469,7 @@ def leer_linea(prompt, hint=""):
                 sys.stdout.flush()
                 pendiente = bytearray()
             except UnicodeDecodeError:
-                if len(pendiente) > 4:
+                if len(pendiente) >= 4:
                     pendiente = bytearray()
                 continue
     except OSError:
