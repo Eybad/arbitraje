@@ -14,7 +14,7 @@ Python 3 + SQLite, solo biblioteca estándar. Pensada para Termux.
     arbitraje delete ID    eliminar jornada (pide confirmacion)
     arbitraje import FILE  importar historico (dry-run por defecto, --commit aplica)
     arbitraje review       revisar excepciones de importacion
-    arbitraje export DIR   exportar CSV/XLSX/XLS (--formato csv|xlsx|xls)
+    arbitraje export DIR   exportar (--formato csv|xlsx|json|jsonl, filtros --desde/--hasta/--estado/--nota)
     arbitraje --version    version
 
 Notas: --torneo obsoleto (usar --nota "[Torneo: X]"), salida Rich opcional si está instalado (fallback stdlib), respetar NO_COLOR y TTY.
